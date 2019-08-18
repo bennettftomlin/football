@@ -16,17 +16,13 @@
 
 #include "../defines.hpp"
 
-#include "../types/singleton.hpp"
-#include "../types/lockable.hpp"
 #include "../scene/scene.hpp"
 
 namespace blunted {
 
-  typedef Lockable < std::vector < boost::shared_ptr<IScene> > > vector_Scenes;
+  typedef std::vector < boost::shared_ptr<IScene> > vector_Scenes;
 
-  class SceneManager : public Singleton<SceneManager> {
-
-    friend class Singleton<SceneManager>;
+  class SceneManager {
 
     public:
       SceneManager();

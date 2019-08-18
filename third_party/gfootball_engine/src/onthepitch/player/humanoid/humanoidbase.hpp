@@ -33,9 +33,7 @@ using namespace blunted;
 class PlayerBase;
 class Match;
 
-typedef std::map < const std::string, boost::intrusive_ptr<Node> > NodeMap;
-
-struct Joint {
+struct HJoint {
   boost::intrusive_ptr<Node> node;
   Vector3 position;
   Quaternion orientation;
@@ -145,7 +143,7 @@ struct AnimApplyBuffer {
     orientation = src.orientation;
     offsets = src.offsets;
   }
-  Animation *anim;
+  Animation *anim = 0;
   int frameNum = 0;
   unsigned long snapshotTime_ms = 0;
   bool smooth = false;
@@ -153,7 +151,7 @@ struct AnimApplyBuffer {
   bool noPos = false;
   Vector3 position;
   radian orientation;
-  std::map < std::string, BiasedOffset > offsets;
+  BiasedOffsets offsets;
 };
 
 struct TemporalHumanoidNode {
@@ -188,8 +186,6 @@ struct SpatialState {
   e_Foot foot;
 };
 
-static const Vector3 emptyVec(0);
-
 class HumanoidBase {
 
   public:
@@ -207,7 +203,7 @@ class HumanoidBase {
     void Put();
 
     virtual void CalculateGeomOffsets();
-    void SetOffset(const std::string &nodeName, float bias, const Quaternion &orientation, bool isRelative = false);
+    void SetOffset(BodyPart body_part, float bias, const Quaternion &orientation, bool isRelative = false);
 
     inline int GetFrameNum() { return currentAnim->frameNum; }
     inline int GetFrameCount() { return currentAnim->anim->GetFrameCount(); }
@@ -268,17 +264,20 @@ class HumanoidBase {
     void SetMovementSimilarityPredicate(const Vector3 &relDesiredDirection, e_Velocity desiredVelocity) const;
     float GetMovementSimilarity(int animIndex, const Vector3 &relDesiredDirection, e_Velocity desiredVelocity, float corneringBias) const;
     bool CompareMovementSimilarity(int animIndex1, int animIndex2) const;
+    bool CompareByOrderFloat(int animIndex1, int animIndex2) const;
     void SetIncomingBodyDirectionSimilarityPredicate(
         const Vector3 &relIncomingBodyDirection) const;
     bool CompareIncomingBodyDirectionSimilarity(int animIndex1, int animIndex2) const;
     void SetBodyDirectionSimilarityPredicate(const Vector3 &lookAt) const;
+    real DirectionSimilarityRating(int animIndex) const;
     bool CompareBodyDirectionSimilarity(int animIndex1, int animIndex2) const;
     void SetTripDirectionSimilarityPredicate(const Vector3 &relDesiredTripDirection) const;
     bool CompareTripDirectionSimilarity(int animIndex1, int animIndex2) const;
     bool CompareBaseanimSimilarity(int animIndex1, int animIndex2) const;
     bool CompareCatchOrDeflect(int animIndex1, int animIndex2) const;
-    void SetNumericVariableSimilarityPredicate(const std::string &varName, float desiredValue) const;
-    bool CompareNumericVariable(int animIndex1, int animIndex2) const;
+    void SetIdlePredicate(float desiredValue) const;
+    bool CompareIdleVariable(int animIndex1, int animIndex2) const;
+    bool ComparePriorityVariable(int animIndex1, int animIndex2) const;
 
     Vector3 CalculatePhysicsVector(Animation *anim, bool useDesiredMovement,
                                    const Vector3 &desiredMovement,
@@ -297,7 +296,7 @@ class HumanoidBase {
     std::vector < std::vector<WeightedVertex> > weightedVerticesVec; // < subgeoms < vertices > >
     unsigned int fullbodySubgeomCount = 0;
     std::vector<int*> uniqueIndicesVec;
-    std::vector<Joint> joints;
+    std::vector<HJoint> joints;
     Vector3 fullbodyOffset;
     boost::intrusive_ptr<Node> fullbodyTargetNode;
 
@@ -332,7 +331,7 @@ class HumanoidBase {
     int fetchedbuf_bodyUpdatePhase = 0;
     int fetchedbuf_bodyUpdatePhaseOffset = 0;
 
-    std::map < std::string, BiasedOffset > offsets;
+    BiasedOffsets offsets;
 
     Anim *currentAnim;
     Anim *previousAnim;
@@ -369,8 +368,7 @@ class HumanoidBase {
     mutable Vector3 predicate_LookAt;
     mutable Vector3 predicate_RelDesiredTripDirection;
     mutable Vector3 predicate_RelDesiredBallDirection;
-    mutable std::string predicate_NumericVariableName;
-    mutable float predicate_NumericVariableValue = 0.0f;
+    mutable float predicate_idle = 0.0f;
 
     const MentalImage *currentMentalImage;
 

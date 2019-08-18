@@ -19,9 +19,6 @@
 
 #include "team.hpp"
 
-#include "../managers/usereventmanager.hpp"
-#include "../managers/resourcemanagerpool.hpp"
-
 #include "../scene/objectfactory.hpp"
 
 #include "../main.hpp"
@@ -36,14 +33,11 @@ HumanGamer::HumanGamer(Team *team, IHIDevice *hid, e_PlayerColor color) : team(t
 }
 
 HumanGamer::~HumanGamer() {
-  if (Verbose()) printf("exiting humangamer.. ");
   delete controller;
 
   if (selectedPlayer) {
     selectedPlayer->SetExternalController(0);
-    selectedPlayer->SetDebug(false);
   }
-  if (Verbose()) printf("done\n");
 }
 
 int HumanGamer::GetSelectedPlayerID() const {
@@ -54,14 +48,10 @@ void HumanGamer::SetSelectedPlayerID(int id) {
   if (selectedPlayer) {
     if (selectedPlayer->GetID() == id) return;
     selectedPlayer->SetExternalController(0);
-    selectedPlayer->SetDebug(false);
   }
   if (id != -1) {
     selectedPlayer = team->GetPlayer(id);
     selectedPlayer->SetExternalController(controller);
-    if (team->GetID() == 0) {
-      selectedPlayer->SetDebug(true);
-    }
   } else {
     selectedPlayer = 0;
   }

@@ -19,10 +19,9 @@
 
 #include <cmath>
 
-#include "widgets/root.hpp"
-
-#include "../../managers/resourcemanagerpool.hpp"
+#include "../../main.hpp"
 #include "../../scene/objectfactory.hpp"
+#include "widgets/root.hpp"
 
 namespace blunted {
 
@@ -59,12 +58,16 @@ namespace blunted {
     scene2D->GetContextSize(contextW, contextH, bpp);
     SDL_Surface *sdlSurface = CreateSDLSurface(contextW, contextH);
 
-    boost::intrusive_ptr < Resource <Surface> > resource = ResourceManagerPool::getSurfaceManager()->Fetch("gui2_blackoutbackground", false, true);
+    boost::intrusive_ptr<Resource<Surface> > resource =
+        GetContext().surface_manager.Fetch("gui2_blackoutbackground", false,
+                                           true);
     Surface *surface = resource->GetResource();
 
     surface->SetData(sdlSurface);
 
-    blackoutBackground = boost::static_pointer_cast<Image2D>(ObjectFactory::GetInstance().CreateObject("gui2_blackoutbackground", e_ObjectType_Image2D));
+    blackoutBackground = boost::static_pointer_cast<Image2D>(
+        GetContext().object_factory.CreateObject("gui2_blackoutbackground",
+                                                 e_ObjectType_Image2D));
     scene2D->CreateSystemObjects(blackoutBackground);
     blackoutBackground->SetImage(resource);
     blackoutBackground->DrawRectangle(0, 0, contextW, contextH, Vector3(0, 0, 0), 255);
@@ -87,15 +90,15 @@ namespace blunted {
 
   void Gui2WindowManager::Exit() {
     for (unsigned int i = 0; i < pendingDelete.size(); i++) {
-      pendingDelete.at(i)->Exit();
-      delete pendingDelete.at(i);
+      pendingDelete[i]->Exit();
+      delete pendingDelete[i];
     }
     pendingDelete.clear();
 
     std::vector < boost::intrusive_ptr<Image2D> > images;
     root->GetImages(images);
     for (unsigned int i = 0; i < images.size(); i++) {
-      boost::intrusive_ptr<Image2D> &image = images.at(i);
+      boost::intrusive_ptr<Image2D> &image = images[i];
       if (image != boost::intrusive_ptr<Image2D>()) {
         Log(e_Warning, "Gui2WindowManager", "Exit", "GUI2 image still here on wm exit: " + image->GetName());
       }
@@ -103,10 +106,6 @@ namespace blunted {
 
     root->Exit();
     delete root;
-  }
-
-  Gui2View *Gui2WindowManager::GetFocus() {
-    return focus;
   }
 
   void Gui2WindowManager::SetFocus(Gui2View *view) {
@@ -124,8 +123,8 @@ namespace blunted {
 
   void Gui2WindowManager::Process() {
     for (int i = 0; i < (signed int)pendingDelete.size(); i++) {
-      pendingDelete.at(i)->Exit();
-      delete pendingDelete.at(i);
+      pendingDelete[i]->Exit();
+      delete pendingDelete[i];
     }
     pendingDelete.clear();
 
@@ -173,12 +172,14 @@ namespace blunted {
 
     SDL_Surface *sdlSurface = CreateSDLSurface(width, height);
 
-    boost::intrusive_ptr < Resource <Surface> > resource = ResourceManagerPool::getSurfaceManager()->Fetch(name, false, true);
+    boost::intrusive_ptr<Resource<Surface> > resource =
+        GetContext().surface_manager.Fetch(name, false, true);
     Surface *surface = resource->GetResource();
 
     surface->SetData(sdlSurface);
 
-    boost::intrusive_ptr<Image2D> image = boost::static_pointer_cast<Image2D>(ObjectFactory::GetInstance().CreateObject(name, e_ObjectType_Image2D));
+    boost::intrusive_ptr<Image2D> image = boost::static_pointer_cast<Image2D>(
+        GetContext().object_factory.CreateObject(name, e_ObjectType_Image2D));
     if (sceneRegister) scene2D->CreateSystemObjects(image);
     image->SetImage(resource);
 
@@ -199,7 +200,7 @@ namespace blunted {
     std::vector < boost::intrusive_ptr<Image2D> > images;
     view->GetImages(images);
     for (unsigned int i = 0; i < images.size(); i++) {
-      boost::intrusive_ptr<Image2D> &image = images.at(i);
+      boost::intrusive_ptr<Image2D> &image = images[i];
       if (image != boost::intrusive_ptr<Image2D>()) {
         float x_percent, y_percent;
         int x, y, w, h;
@@ -214,14 +215,6 @@ namespace blunted {
     scene2D->DeleteObject(image);
   }
 
-  void Gui2WindowManager::BlackoutBackground(bool onOff) {
-    if (onOff) {
-      blackoutBackground->Enable();
-    } else {
-      blackoutBackground->Disable();
-    }
-  }
-
   void Gui2WindowManager::MarkForDeletion(Gui2View *view) {
     pendingDelete.push_back(view);
   }
@@ -230,7 +223,7 @@ namespace blunted {
     std::vector < boost::intrusive_ptr<Image2D> > images;
     view->GetImages(images);
     for (unsigned int i = 0; i < images.size(); i++) {
-      boost::intrusive_ptr<Image2D> &image = images.at(i);
+      boost::intrusive_ptr<Image2D> &image = images[i];
       if (image != boost::intrusive_ptr<Image2D>()) {
         image->Enable();
       }
@@ -241,7 +234,7 @@ namespace blunted {
     std::vector < boost::intrusive_ptr<Image2D> > images;
     view->GetImages(images);
     for (unsigned int i = 0; i < images.size(); i++) {
-      boost::intrusive_ptr<Image2D> &image = images.at(i);
+      boost::intrusive_ptr<Image2D> &image = images[i];
       if (image != boost::intrusive_ptr<Image2D>()) {
         image->Disable();
       }

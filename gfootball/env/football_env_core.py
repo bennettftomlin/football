@@ -29,24 +29,25 @@ import numpy as np
 from six.moves import range
 import timeit
 
-_engine = None
-_engine_in_use = False
+_unused_engines = []
+_unused_rendering_engine = None
+_active_rendering = False
 
 
 class FootballEnvCore(object):
 
-  def __init__(self):
+  def __init__(self, config):
     self._env = None
+    self._config = config
 
   @cfg.log
-  def reset(self, config, trace):
-    global _engine
-    global _engine_in_use
+  def reset(self, trace):
     """Reset environment for a new episode using a given config."""
+    global _unused_engines
+    global _unused_rendering_engine
     self._waiting_for_game_count = 0
     self._steps_time = 0
     self._step = 0
-    self._config = config
     self._trace = trace
     self._observation = None
     self._info = None
@@ -54,41 +55,64 @@ class FootballEnvCore(object):
     self._config.NewScenario()
     self._scenario_cfg = self._config.ScenarioConfig()
     if not self._env:
-      assert not _engine_in_use, ('Environment does not support multiple '
-                                  'instances of the game in the same process.')
-      _engine_in_use = True
-      if not _engine:
-        _engine = libgame.GameEnv()
-        _engine.start_game(self._config.GameConfig())
-      self._env = _engine
-    self._home_controllers = []
-    self._away_controllers = []
-    for _ in range(self._scenario_cfg.home_agents):
-      controller = football_action_set.StickyWrapper(config, self)
-      self._home_controllers.append(controller)
-    for _ in range(self._scenario_cfg.away_agents):
-      controller = football_action_set.StickyWrapper(config, self)
-      self._away_controllers.append(controller)
+      if self._config['render']:
+        if _unused_rendering_engine:
+          self._env = _unused_rendering_engine
+          _unused_rendering_engine = None
+          self.rendering_in_use()
+      else:
+        if _unused_engines:
+          self._env = _unused_engines.pop()
+      if not self._env:
+        if self._config['render']:
+          self.rendering_in_use()
+        self._env = libgame.GameEnv()
+        self._env.start_game(self._config.GameConfig())
+    self._left_controllers = []
+    self._right_controllers = []
+    for _ in range(self._scenario_cfg.left_agents):
+      controller = football_action_set.StickyWrapper(self._config, self)
+      self._left_controllers.append(controller)
+    for _ in range(self._scenario_cfg.right_agents):
+      controller = football_action_set.StickyWrapper(self._config, self)
+      self._right_controllers.append(controller)
     self._env.reset(self._config.ScenarioConfig())
     while not self._retrieve_observation():
       self._env.step()
     return True
 
-  def __del__(self):
+  def rendering_in_use(self):
+    global _active_rendering
+    assert not _active_rendering, ('Environment does not support multiple '
+                                   'rendering instances in the same process.')
+    _active_rendering = True
+
+  def close(self):
+    global _unused_engines
+    global _unused_rendering_engine
+    global _active_rendering
     if self._env:
-      global _engine_in_use
-      _engine_in_use = False
+      if self._config['render']:
+        assert not _unused_rendering_engine
+        _unused_rendering_engine = self._env
+        _active_rendering = False
+      else:
+        _unused_engines.append(self._env)
+      self._env = None
+
+  def __del__(self):
+    self.close()
 
   @cfg.log
   def step(self, action):
     # If agent 'holds' the game for too long, just start it.
     if self._waiting_for_game_count > 20:
       self._waiting_for_game_count = 0
-      action = [football_action_set.core_action_short_pass] * (
-          self._scenario_cfg.home_agents + self._scenario_cfg.away_agents)
+      action = [football_action_set.action_short_pass] * (
+          self._scenario_cfg.left_agents + self._scenario_cfg.right_agents)
 
     assert len(action) == (
-        self._scenario_cfg.home_agents + self._scenario_cfg.away_agents)
+        self._scenario_cfg.left_agents + self._scenario_cfg.right_agents)
     debug = {}
     if self._done:
       return copy.deepcopy(self._observation), 0, self._done, debug
@@ -96,22 +120,22 @@ class FootballEnvCore(object):
     debug['action'] = action
     if self._step >= self._config['game_duration']:
       self._done = True
-    self._home_team = True
+    self._left_team = True
     self._player_id = 0
     action_index = 0
-    for _ in range(self._scenario_cfg.home_agents):
+    for _ in range(self._scenario_cfg.left_agents):
       player_action = action[action_index]
       action_index += 1
       assert isinstance(player_action, football_action_set.CoreAction)
-      self._home_controllers[self._player_id].perform_action(player_action)
+      self._left_controllers[self._player_id].perform_action(player_action)
       self._player_id += 1
     self._player_id = 0
-    self._home_team = False
-    for _ in range(self._scenario_cfg.away_agents):
+    self._left_team = False
+    for _ in range(self._scenario_cfg.right_agents):
       player_action = action[action_index]
       action_index += 1
       assert isinstance(player_action, football_action_set.CoreAction)
-      self._away_controllers[self._player_id].perform_action(player_action)
+      self._right_controllers[self._player_id].perform_action(player_action)
       self._player_id += 1
     while True:
       enter_time = timeit.default_timer()
@@ -183,7 +207,6 @@ class FootballEnvCore(object):
     Returns whether game
        is on or not.
     """
-    game_is_on = False
     info = self._env.get_info()
     if info.done:
       self._done = True
@@ -208,32 +231,42 @@ class FootballEnvCore(object):
     result['ball_rotation'] = np.array(
         [info.ball_rotation[0], info.ball_rotation[1], info.ball_rotation[2]])
 
-    self.convert_players_observation(info.home_team, 'home_team', result)
-    self.convert_players_observation(info.away_team, 'away_team', result)
-    result['home_agent_sticky_actions'] = []
-    result['home_agent_controlled_player'] = []
-    result['away_agent_sticky_actions'] = []
-    result['away_agent_controlled_player'] = []
-    for i in range(self._scenario_cfg.home_agents):
-      result['home_agent_controlled_player'].append(
-          info.home_controllers[i].controlled_player)
-      result['home_agent_sticky_actions'].append(np.array(
-          self._home_controllers[i].active_sticky_actions(), dtype=np.uint8))
-      if info.home_controllers[i].controlled_player >= 0:
-        game_is_on = True
-    for i in range(self._scenario_cfg.away_agents):
-      result['away_agent_controlled_player'].append(
-          info.away_controllers[i].controlled_player)
-      result['away_agent_sticky_actions'].append(np.array(
-          self._away_controllers[i].active_sticky_actions(), dtype=np.uint8))
+    self.convert_players_observation(info.left_team, 'left_team', result)
+    self.convert_players_observation(info.right_team, 'right_team', result)
+    result['left_agent_sticky_actions'] = []
+    result['left_agent_controlled_player'] = []
+    result['right_agent_sticky_actions'] = []
+    result['right_agent_controlled_player'] = []
+    for i in range(self._scenario_cfg.left_agents):
+      if i >= len(info.left_controllers):
+        result['left_agent_controlled_player'].append(-1)
+        result['left_agent_sticky_actions'].append(
+            np.zeros((len(football_action_set.get_sticky_actions(
+                self._config))), dtype=np.uint8))
+        continue
+      result['left_agent_controlled_player'].append(
+          info.left_controllers[i].controlled_player)
+      result['left_agent_sticky_actions'].append(np.array(
+          self._left_controllers[i].active_sticky_actions(), dtype=np.uint8))
+    for i in range(self._scenario_cfg.right_agents):
+      if i >= len(info.right_controllers):
+        result['right_agent_controlled_player'].append(-1)
+        result['right_agent_sticky_actions'].append(
+            np.zeros((len(football_action_set.get_sticky_actions(
+                self._config))), dtype=np.uint8))
+        continue
+      result['right_agent_controlled_player'].append(
+          info.right_controllers[i].controlled_player)
+      result['right_agent_sticky_actions'].append(np.array(
+          self._right_controllers[i].active_sticky_actions(), dtype=np.uint8))
     result['game_mode'] = int(info.game_mode)
-    result['score'] = [info.home_goals, info.away_goals]
+    result['score'] = [info.left_goals, info.right_goals]
     result['ball_owned_team'] = info.ball_owned_team
     result['ball_owned_player'] = info.ball_owned_player
     result['steps_left'] = self._config['game_duration'] - self._step
     self._observation = result
     self._info = info
-    return game_is_on
+    return info.is_in_play
 
   def convert_players_observation(self, players, name, result):
     """Converts internal players representation to the public one.
@@ -243,7 +276,7 @@ class FootballEnvCore(object):
 
     Args:
       players: collection of team players to convert.
-      name: name of the team being converted (home_team or away_team).
+      name: name of the team being converted (left_team or right_team).
       result: collection where conversion result is added.
     """
     positions = []
@@ -277,5 +310,5 @@ class FootballEnvCore(object):
     return copy.deepcopy(self._observation)
 
   def perform_action(self, action):
-    # Home team player 0 action...
-    self._env.perform_action(action, self._home_team, self._player_id)
+    # Left team player 0 action...
+    self._env.perform_action(action, self._left_team, self._player_id)

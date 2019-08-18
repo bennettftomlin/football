@@ -36,6 +36,8 @@ from six.moves import zip
 import six.moves.cPickle
 import tensorflow as tf
 
+REMOVED_FRAME = 'removed'
+
 try:
   import cv2
 except ImportError:
@@ -48,13 +50,11 @@ class DumpConfig(object):
   def __init__(self,
                max_length=200,
                max_count=1,
-               skip_visuals=False,
                snapshot_delay=0,
                min_frequency=10):
     self._max_length = max_length
     self._max_count = max_count
     self._last_dump = 0
-    self._skip_visuals = skip_visuals
     self._snapshot_delay = snapshot_delay
     self._file_name = None
     self._result = None
@@ -86,53 +86,54 @@ class TextWriter(object):
 def get_frame(trace):
   if 'frame' in trace._trace['observation']:
     frame = trace._trace['observation']['frame']
-  else:
-    frame = np.uint8(np.zeros((600, 800, 3)))
-    corner1 = (0, 0)
-    corner2 = (799, 0)
-    corner3 = (799, 599)
-    corner4 = (0, 599)
-    line_color = (0, 255, 255)
-    cv2.line(frame, corner1, corner2, line_color)
-    cv2.line(frame, corner2, corner3, line_color)
-    cv2.line(frame, corner3, corner4, line_color)
-    cv2.line(frame, corner4, corner1, line_color)
-    cv2.line(frame, (399, 0), (399, 799), line_color)
+    if frame != REMOVED_FRAME:
+      return frame
+  frame = np.uint8(np.zeros((600, 800, 3)))
+  corner1 = (0, 0)
+  corner2 = (799, 0)
+  corner3 = (799, 599)
+  corner4 = (0, 599)
+  line_color = (0, 255, 255)
+  cv2.line(frame, corner1, corner2, line_color)
+  cv2.line(frame, corner2, corner3, line_color)
+  cv2.line(frame, corner3, corner4, line_color)
+  cv2.line(frame, corner4, corner1, line_color)
+  cv2.line(frame, (399, 0), (399, 799), line_color)
+  writer = TextWriter(
+      frame,
+      trace['ball'][0],
+      trace['ball'][1],
+      field_coords=True,
+      color=(255, 0, 0))
+  writer.write('B')
+  for player_idx, player_coord in enumerate(trace['left_team']):
     writer = TextWriter(
         frame,
-        trace['ball'][0],
-        trace['ball'][1],
+        player_coord[0],
+        player_coord[1],
         field_coords=True,
-        color=(255, 0, 0))
-    writer.write('B')
-    for player_idx, player_coord in enumerate(trace['home_team']):
-      writer = TextWriter(
-          frame,
-          player_coord[0],
-          player_coord[1],
-          field_coords=True,
-          color=(0, 255, 0))
-      letter = 'H'
-      if 'active' in trace and trace['active'] == player_idx:
-        letter = 'X'
-      elif 'home_agent_controlled_player' in trace and player_idx in trace[
-          'home_agent_controlled_player']:
-        letter = 'X'
-      writer.write(letter)
-    for player_idx, player_coord in enumerate(trace['away_team']):
-      writer = TextWriter(
-          frame,
-          player_coord[0],
-          player_coord[1],
-          field_coords=True,
-          color=(0, 0, 255))
-      letter = 'A'
-      if 'opponent_active' in trace and trace['opponent_active'] == player_idx:
-        letter = 'Y'
-      elif 'away_agent_controlled_player' in trace and player_idx in trace[
-          'away_agent_controlled_player']:
-        letter = 'Y'
-      writer.write(letter)
+        color=(0, 255, 0))
+    letter = 'H'
+    if 'active' in trace and player_idx in trace['active']:
+      letter = 'X'
+    elif 'left_agent_controlled_player' in trace and player_idx in trace[
+        'left_agent_controlled_player']:
+      letter = 'X'
+    writer.write(letter)
+  for player_idx, player_coord in enumerate(trace['right_team']):
+    writer = TextWriter(
+        frame,
+        player_coord[0],
+        player_coord[1],
+        field_coords=True,
+        color=(0, 0, 255))
+    letter = 'A'
+    if 'opponent_active' in trace and player_idx in trace['opponent_active']:
+      letter = 'Y'
+    elif 'right_agent_controlled_player' in trace and player_idx in trace[
+        'right_agent_controlled_player']:
+      letter = 'Y'
+    writer.write(letter)
   return frame
 
 
@@ -164,7 +165,7 @@ def write_dump(name, trace, skip_visuals=False, config={}):
       frame = cv2.resize(frame, frame_dim, interpolation=cv2.INTER_AREA)
       if config['display_game_stats']:
         writer = TextWriter(frame, 950 if HIGH_RES else 500)
-        writer.write('SCORE: %d - %d' % (o._score[0], o._score[1]))
+        writer.write('SCORE: %d - %d' % (o['score'][0], o['score'][1]))
         writer.write('BALL OWNED TEAM: %d' % (o['ball_owned_team']))
         writer.write('BALL OWNED PLAYER: %d' % (o['ball_owned_player']))
         writer.write('REWARD %.4f' % (o['reward']))
@@ -173,14 +174,18 @@ def write_dump(name, trace, skip_visuals=False, config={}):
         writer.write('FRAME: %d' % frame_cnt)
         writer.write('TIME: %f' % (o._time - time))
         sticky_actions = football_action_set.get_sticky_actions(config)
-        assert len(sticky_actions) == len(o['home_agent_sticky_actions'][0])
+        sticky_actions_field = 'left_agent_sticky_actions'
+        if len(o[sticky_actions_field]) == 0:
+          sticky_actions_field = 'right_agent_sticky_actions'
+        assert len(sticky_actions) == len(o[sticky_actions_field][0])
         active_direction = None
         for i in range(len(sticky_actions)):
           if sticky_actions[i]._directional:
-            if o['home_agent_sticky_actions'][0][i]:
+            if o[sticky_actions_field][0][i]:
               active_direction = sticky_actions[i]
           else:
-            writer.write('%s: %d' % (sticky_actions[i]._name, o['home_agent_sticky_actions'][0][i]))
+            writer.write('%s: %d' % (sticky_actions[i]._name,
+                                     o[sticky_actions_field][0][i]))
         writer.write('DIRECTION: %s' % ('NONE' if active_direction is None
                                         else active_direction._name))
         if 'action' in o._trace['debug']:
@@ -203,7 +208,7 @@ def write_dump(name, trace, skip_visuals=False, config={}):
     os.close(fd)
     try:
       # For some reason sometimes the file is missing, so the code fails.
-      tf.gfile.Copy(temp_path, name + '.avi', overwrite=True)
+      tf.io.gfile.copy(temp_path, name + '.avi', overwrite=True)
       os.remove(temp_path)
     except:
       logging.info(traceback.format_exc())
@@ -212,9 +217,9 @@ def write_dump(name, trace, skip_visuals=False, config={}):
   for o in trace:
     if 'frame' in o._trace['observation']:
       temp_frames.append(o._trace['observation']['frame'])
-      o._trace['observation']['frame'] = 'removed'
+      o._trace['observation']['frame'] = REMOVED_FRAME
     to_pickle.append(o._trace)
-  with tf.gfile.Open(name + '.dump', 'wb') as f:
+  with tf.io.gfile.GFile(name + '.dump', 'wb') as f:
     six.moves.cPickle.dump(to_pickle, f)
   for o in trace:
     if 'frame' in o._trace['observation']:
@@ -225,14 +230,6 @@ def write_dump(name, trace, skip_visuals=False, config={}):
   return True
 
 
-def logging_write_dump(name, trace, skip_visuals=False, config={}):
-  try:
-    write_dump(name, trace, skip_visuals=skip_visuals, config=config)
-  except Exception as e:
-    logging.info(traceback.format_exc())
-    raise
-
-
 class ObservationState(object):
 
   def __init__(self, trace):
@@ -241,8 +238,6 @@ class ObservationState(object):
     self._additional_frames = []
     self._debugs = []
     self._time = timeit.default_timer()
-    self._away_defence_max_x = -10
-    self._score = [0, 0]
 
   def __getitem__(self, key):
     if key in self._trace:
@@ -258,27 +253,6 @@ class ObservationState(object):
       return True
     return key in self._trace['debug']
 
-  def debug(self):
-    logging.info('SCORE: ', self._score)
-
-  def _get_coordinates(self, o):
-    """Retrieves coordinates of an object in question.
-
-    Args:
-      o: Object name for which to retrieve coordinates from observations.
-
-    Returns:
-      Objects's coordinates.
-    """
-    if isinstance(o, str):
-      if o == 'active':
-        o = self['home_team'][self['active']]
-      else:
-        o = self[o]
-    if isinstance(o, list):
-      o = np.array(o)
-    return o
-
   def _distance(self, o1, o2):
     # We add 'z' dimension if not present, as ball has 3 dimensions, while
     # players have only 2.
@@ -287,17 +261,6 @@ class ObservationState(object):
     if len(o2) == 2:
       o2 = np.array([o2[0], o2[1], 0])
     return np.linalg.norm(o1 - o2)
-
-  def object_distance(self, object1, object2):
-    o1 = self._get_coordinates(object1)
-    o2 = self._get_coordinates(object2)
-    if o1.ndim == 1 and o2.ndim == 1:
-      return self._distance(o1, o2)
-    if o1.ndim == 2 and o2.ndim == 1:
-      return min([self._distance(o, o2) for o in o1])
-    if o1.ndim == 1 and o2.ndim == 2:
-      return min([self._distance(o, o1) for o in o2])
-    assert 'Not supported operation'
 
   def add_debug(self, text):
     self._debugs.append(text)
@@ -319,21 +282,17 @@ class ObservationProcessor(object):
         max_length=200,
         max_count=(100000 if config['dump_scores'] else 0),
         min_frequency=600,
-        snapshot_delay=10,
-        skip_visuals=not config['write_video'])
+        snapshot_delay=10)
     self._dump_config['lost_score'] = DumpConfig(
         max_length=200,
         max_count=(100000 if config['dump_scores'] else 0),
         min_frequency=600,
-        snapshot_delay=10,
-        skip_visuals=not config['write_video'])
+        snapshot_delay=10)
     self._dump_config['episode_done'] = DumpConfig(
         max_length=(200 if HIGH_RES else 10000),
-        max_count=(100000 if config['dump_full_episodes'] else 0),
-        skip_visuals=not config['write_video'])
+        max_count=(100000 if config['dump_full_episodes'] else 0))
     self._dump_config['shutdown'] = DumpConfig(
-        max_length=(200 if HIGH_RES else 10000),
-        skip_visuals=not config['write_video'])
+        max_length=(200 if HIGH_RES else 10000))
     self._thread_pool = None
     self._dump_directory = None
     self._config = config
@@ -360,13 +319,13 @@ class ObservationProcessor(object):
     return self._trace[key]
 
   def add_frame(self, frame):
-    if len(self._trace) > 0:
+    if len(self._trace) > 0 and self._config['write_video']:
       self._trace[-1].add_frame(frame)
 
   @cfg.log
   def update(self, trace):
     self._frame += 1
-    if not self._config['write_video'] and 'frame' in trace:
+    if not self._config['write_video'] and 'frame' in trace['observation']:
       # Don't record frame in the trace if we don't write video - full episode
       # consumes over 8G.
       no_video_trace = trace
@@ -397,7 +356,7 @@ class ObservationProcessor(object):
     config._last_dump = timeit.default_timer()
     if self._dump_directory is None:
       self._dump_directory = self._config['tracesdir']
-      tf.gfile.MakeDirs(self._dump_directory)
+      tf.io.gfile.makedirs(self._dump_directory)
     config._file_name = '{2}/{0}_{1}'.format(
         name,
         datetime.datetime.now().strftime('%Y%m%d-%H%M%S%f'),
@@ -414,7 +373,7 @@ class ObservationProcessor(object):
         if finish or config._trigger_step <= self._frame:
           logging.info('Start dump %s', name)
           trace = list(self._trace)[-config._max_length:]
-          write_dump(config._file_name, trace, config._skip_visuals,
+          write_dump(config._file_name, trace, self._config['write_video'],
                      self._config)
           config._file_name = None
       if config._result:

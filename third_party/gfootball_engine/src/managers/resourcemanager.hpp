@@ -23,7 +23,6 @@
 #include "../base/log.hpp"
 #include "../base/utils.hpp"
 
-#include "../types/lockable.hpp"
 #include "../types/loader.hpp"
 
 #include "../managers/environmentmanager.hpp"
@@ -37,7 +36,7 @@ namespace blunted {
   class ResourceManager {
 
     public:
-      ResourceManager(const std::string &typeDescription) : typeDescription(typeDescription) {};
+      ResourceManager() {};
 
       ~ResourceManager() {
 
@@ -183,8 +182,6 @@ namespace blunted {
       std::map < std::string, Loader<T>* > loaders;
 
       std::map < std::string, boost::intrusive_ptr < Resource <T> > > resources;
-
-      std::string typeDescription;
 
     private:
 

@@ -131,8 +131,6 @@ namespace blunted {
       virtual void HDRCaptureOverallBrightness();
       virtual float HDRGetOverallBrightness();
 
-      void operator()();
-
     protected:
       SDL_GLContext context;
       SDL_Window* window;
@@ -159,11 +157,6 @@ namespace blunted {
       screenshoot last_screen_;
 
   };
-
-#ifdef WIN32
-  static SDL_SysWMinfo wmInfo;
-#endif
-
 }
 
 #endif

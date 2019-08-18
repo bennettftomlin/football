@@ -17,10 +17,11 @@
 
 #include "utils.hpp"
 
+#include "../main.hpp"
+#include "file.h"
 #include "log.hpp"
-
-#include "math/vector3.hpp"
 #include "math/quaternion.hpp"
+#include "math/vector3.hpp"
 
 namespace blunted {
 
@@ -34,36 +35,38 @@ namespace blunted {
 
   // ----- load .ase file into a tree
 
-  s_tree *tree_load(const std::string asefile) {
-    std::ifstream datafile(asefile.c_str(), std::ios::in);
-    if (datafile.fail()) {
-      Log(e_FatalError, "tree_load", "", "could not open " + asefile);
-      return NULL;
-    }
-
-    s_tree *tree = tree_readblock(datafile);
-
-    datafile.close();
-
+  s_tree *tree_load(std::string asefile) {
+    asefile = GetGameConfig().updatePath(asefile);
+    const std::string &datafile = GetFile(asefile);
+    const char *data = datafile.c_str();
+    int len = datafile.size();
+    s_tree *tree = tree_readblock(data, len);
     return tree;
   }
 
-  s_tree *tree_readblock(std::ifstream &datafile) {
+  s_tree *tree_readblock(const char *&datafile, int &len) {
     s_tree *content = new s_tree();
 
     bool quit = false;
 
-    while (!datafile.eof() && quit == false) {
+    while (len > 0 && quit == false) {
       char tmp[2048];
-      datafile.getline(tmp, 2048);
+      int l = 0;
+      for (l = 0; datafile[0] != '\n'; l++) {
+        tmp[l] = datafile[0];
+        datafile++;
+        len--;
+      }
+      tmp[l] = 0;
+      datafile++;
+      len--;
       std::string line;
       line.assign(tmp);
       std::vector <std::string> tokens;
 
       // delete CR character, if it's there
-      size_t ln = strlen(line.c_str()) - 1;
-      if (ln > 0) {
-        if (line.c_str()[ln] == '\r') line = line.substr(0, line.length() - 1);
+      if (line.length() > 1) {
+        if (line[line.length() - 1] == '\r') line = line.substr(0, line.length() - 1);
       }
 
       line = stringchomp(line, '\t');
@@ -81,12 +84,12 @@ namespace blunted {
             entry->name = tokens.at(0);
           }
           for (unsigned int i = 1; i < tokens.size(); i++) {
-            entry->values.push_back(tokens.at(i));
+            entry->values.push_back(tokens[i]);
           }
 
           if (tokens.at(tokens.size() - 1).compare("{") == 0) { // iterate
             entry->values.pop_back();
-            entry->subtree = tree_readblock(datafile);
+            entry->subtree = tree_readblock(datafile, len);
           }
           content->entries.push_back(entry);
         }
@@ -96,15 +99,14 @@ namespace blunted {
     return content;
   }
 
-
   // tree structure utility functions
 
   const s_treeentry *treeentry_find(const s_tree *tree, const std::string needle) {
     assert(tree);
 
     for (unsigned int i = 0; i < tree->entries.size(); i++) {
-      assert(tree->entries.at(i));
-      if (tree->entries.at(i)->name.compare(needle) == 0) return tree->entries.at(i);
+      assert(tree->entries[i]);
+      if (tree->entries[i]->name.compare(needle) == 0) return tree->entries[i];
     }
     return NULL;
   }
@@ -113,10 +115,10 @@ namespace blunted {
     //assert(tree);
 
     for (unsigned int i = 0; i < tree->entries.size(); i++) {
-      assert(tree->entries.at(i));
-      if (tree->entries.at(i)->name.compare(needle) == 0) {
-        assert(tree->entries.at(i)->subtree);
-        return tree->entries.at(i)->subtree;
+      assert(tree->entries[i]);
+      if (tree->entries[i]->name.compare(needle) == 0) {
+        assert(tree->entries[i]->subtree);
+        return tree->entries[i]->subtree;
       }
     }
     return NULL;
@@ -147,54 +149,23 @@ namespace blunted {
     }
   }
 
-  std::string StripString(const std::string &input) {
-    std::string result;
-    for (unsigned int i = 0; i < input.size(); i++) {
-      if (isalnum(input[i])) result += input[i];
-    }
-    return result;
-  }
-
   std::string file_to_string(std::string filename) {
-
-    char line[1024];
-    std::ifstream file;
-
-    file.open(filename.c_str(), std::ios::in);
-
-    if (file.fail()) Log(e_FatalError, "utils", "file_to_vector", "file not found or empty: " + filename);
-
-    std::string source;
-    while (file.getline(line, 1024)) {
-      source.append(line);
-    }
-
-    // remove possible windows CR
-    source.erase( std::remove(source.begin(), source.end(), '\r'), source.end() );
-
-    file.close();
-
-    return source;
+    return GetFile(GetGameConfig().updatePath(filename));
   }
 
-  void file_to_vector(std::string filename, std::vector<std::string> &destination) {
-
-    char line[32767];
-    std::ifstream file;
-
-    file.open(filename.c_str(), std::ios::in);
-
-    if (file.fail()) Log(e_FatalError, "utils", "file_to_vector", "file not found or empty: " + filename);
-
-    while (file.getline(line, 32767)) {
-      std::string line_str;
-      line_str.assign(line);
-      // remove possible windows CR
-      line_str.erase( std::remove(line_str.begin(), line_str.end(), '\r'), line_str.end() );
-      destination.push_back(line_str);
+  void file_to_vector(std::string filename,
+                      std::vector<std::string> &destination) {
+    std::string file = GetFile(GetGameConfig().updatePath(filename));
+    int last_pos = 0;
+    for (int x = 0; x < file.length(); x++) {
+      if (file[x] == '\n') {
+        destination.push_back(file.substr(last_pos, x - last_pos));
+        last_pos = x + 1;
+      }
     }
-
-    file.close();
+    if (last_pos < file.length()) {
+      destination.push_back(file.substr(last_pos, file.length() - last_pos));
+    }
   }
 
   std::string get_file_name(const std::string &filename) {
@@ -265,17 +236,4 @@ namespace blunted {
     return quaternion;
   }
 
-  bool CreateDirectory(boost::filesystem::path const &dir) {
-    namespace fs = boost::filesystem;
-    return fs::create_directory(dir);
-  }
-
-  bool CopyFile(boost::filesystem::path const &source, boost::filesystem::path const &destinationDir) {
-    boost::system::error_code error;
-    namespace fs = boost::filesystem;
-    fs::copy_file(source, destinationDir / source.filename(), error);
-    //if (error != 0) return false; else return true;
-    return true;
-  }
-}
-
+  }  // namespace blunted

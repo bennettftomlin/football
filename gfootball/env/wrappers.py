@@ -62,119 +62,132 @@ class Simple115StateWrapper(gym.ObservationWrapper):
 
   def __init__(self, env):
     gym.ObservationWrapper.__init__(self, env)
+    shape = (self.env.unwrapped._config.number_of_players_agent_controls(), 115)
     self.observation_space = gym.spaces.Box(
-        low=-1, high=1, shape=(115,), dtype=np.float32)
+        low=-1, high=1, shape=shape, dtype=np.float32)
 
-  def observation(self, obs):
-    o = []
-    # ball position
-    o.extend(obs['ball'])
-    # ball direction
-    o.extend(obs['ball_direction'])
-    # one hot encoding of which team owns the ball
-    if obs['ball_owned_team'] == -1:
-      o.extend([1, 0, 0])
-    if obs['ball_owned_team'] == 0:
-      o.extend([0, 1, 0])
-    if obs['ball_owned_team'] == 1:
-      o.extend([0, 0, 1])
+  def observation(self, observation):
+    """Converts an observation into simple115 format.
 
-    active = [0] * 11
-    active[obs['active']] = 1
-    o.extend(active)
-    o.extend(obs['home_team'].flatten())
-    o.extend(obs['home_team_direction'].flatten())
-    o.extend(obs['away_team'].flatten())
-    o.extend(obs['away_team_direction'].flatten())
+    Args:
+      observation: observation that the environment returns
 
-    game_mode = [0] * 7
-    game_mode[obs['game_mode']] = 1
-    o.extend(game_mode)
-    return np.array(o, dtype=np.float32)
+    Returns:
+      (N, 155) shaped representation, where N stands for the number of players
+      being controlled.
+    """
+    final_obs = []
+    for obs in observation:
+      o = []
+      o.extend(obs['left_team'].flatten())
+      o.extend(obs['left_team_direction'].flatten())
+      o.extend(obs['right_team'].flatten())
+      o.extend(obs['right_team_direction'].flatten())
 
+      # If there were less than 11vs11 players we backfill missing values with
+      # -1.
+      # 88 = 11 (players) * 2 (teams) * 2 (positions & directions) * 2 (x & y)
+      if len(o) < 88:
+        o.extend([-1] * (88 - len(o)))
 
-class Simple21StateWrapper(gym.ObservationWrapper):
-  """A wrapper that converts an observation to a 21-features state."""
+      # ball position
+      o.extend(obs['ball'])
+      # ball direction
+      o.extend(obs['ball_direction'])
+      # one hot encoding of which team owns the ball
+      if obs['ball_owned_team'] == -1:
+        o.extend([1, 0, 0])
+      if obs['ball_owned_team'] == 0:
+        o.extend([0, 1, 0])
+      if obs['ball_owned_team'] == 1:
+        o.extend([0, 0, 1])
 
-  def __init__(self, env):
-    gym.ObservationWrapper.__init__(self, env)
-    self.observation_space = gym.spaces.Box(
-        low=-1, high=1, shape=(21,), dtype=np.float32)
+      active = [0] * 11
+      if obs['active'] != -1:
+        active[obs['active']] = 1
+      o.extend(active)
 
-  def observation(self, obs):
-    o = []
-    # ball position
-    o.extend(obs['ball'])
-    # ball direction
-    o.extend(obs['ball_direction'])
-    # one hot encoding of which team owns the ball
-    if obs['ball_owned_team'] == -1:
-      o.extend([1, 0, 0])
-    if obs['ball_owned_team'] == 0:
-      o.extend([0, 1, 0])
-    if obs['ball_owned_team'] == 1:
-      o.extend([0, 0, 1])
-    # position of an active player
-    active_position = obs['home_team'][obs['active']]
-    o.extend(active_position)
-    # direction of an active player
-    o.extend(obs['home_team_direction'][obs['active']])
-    # away goalkeeper position
-    for idx, role in enumerate(obs['away_team_roles']):
-      if role == libgame.e_PlayerRole.e_PlayerRole_GK:
-        o.extend(obs['away_team'][idx])
-        o.extend(obs['away_team_direction'][idx])
-        break
-    # closest opponent
-    _, opp_idx = min(
-        [((opp_x - active_position[0])**2 + (opp_y - active_position[1])**2,
-          idx)
-         for idx, (opp_x, opp_y) in enumerate(obs['away_team'])])
-    o.extend(obs['away_team'][opp_idx])
-    o.extend(obs['away_team_direction'][opp_idx])
-    return np.array(o, dtype=np.float32)
+      game_mode = [0] * 7
+      game_mode[obs['game_mode']] = 1
+      o.extend(game_mode)
+      final_obs.append(o)
+    return np.array(final_obs, dtype=np.float32)
 
 
 class PixelsStateWrapper(gym.ObservationWrapper):
   """A wrapper that extracts pixel representation."""
 
-  def __init__(self, env, grayscale=True):
+  def __init__(self, env, grayscale=True,
+               channel_dimensions=(observation_preprocessing.SMM_WIDTH,
+                                   observation_preprocessing.SMM_HEIGHT)):
     gym.ObservationWrapper.__init__(self, env)
     self._grayscale = grayscale
-    self._i=0
+    self._channel_dimensions = channel_dimensions
     self.observation_space = gym.spaces.Box(
         low=0, high=255,
-        shape=(observation_preprocessing.SMM_HEIGHT,
-               observation_preprocessing.SMM_WIDTH,
+        shape=(self.env.unwrapped._config.number_of_players_agent_controls(),
+               channel_dimensions[1], channel_dimensions[0],
                1 if grayscale else 3),
         dtype=np.uint8)
 
   def observation(self, obs):
-    frame = obs['frame']
-    if self._grayscale:
-      frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-    frame = cv2.resize(frame, (observation_preprocessing.SMM_WIDTH,
-                               observation_preprocessing.SMM_HEIGHT),
-                       interpolation=cv2.INTER_AREA)
-    if self._grayscale:
-      frame = np.expand_dims(frame, -1)
-    return frame
+    o = []
+    for observation in obs:
+      frame = observation['frame']
+      if self._grayscale:
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+      frame = cv2.resize(frame, (self._channel_dimensions[0],
+                                 self._channel_dimensions[1]),
+                         interpolation=cv2.INTER_AREA)
+      if self._grayscale:
+        frame = np.expand_dims(frame, -1)
+      o.append(frame)
+    return np.array(o, dtype=np.uint8)
 
 
 class SMMWrapper(gym.ObservationWrapper):
   """A wrapper that converts an observation to a minimap."""
 
+  def __init__(self, env,
+               channel_dimensions=(observation_preprocessing.SMM_WIDTH,
+                                   observation_preprocessing.SMM_HEIGHT)):
+    gym.ObservationWrapper.__init__(self, env)
+    self._channel_dimensions = channel_dimensions
+    shape=(self.env.unwrapped._config.number_of_players_agent_controls(),
+           channel_dimensions[1], channel_dimensions[0],
+           len(observation_preprocessing.get_smm_layers(
+               self.env.unwrapped._config)))
+    self.observation_space = gym.spaces.Box(
+        low=0, high=255, shape=shape, dtype=np.uint8)
+
+  def observation(self, obs):
+    return observation_preprocessing.generate_smm(
+        obs, channel_dimensions=self._channel_dimensions,
+        config=self.env.unwrapped._config)
+
+
+class SingleAgentObservationWrapper(gym.ObservationWrapper):
+  """A wrapper that converts an observation to a minimap."""
+
   def __init__(self, env):
     gym.ObservationWrapper.__init__(self, env)
     self.observation_space = gym.spaces.Box(
-        low=0, high=255,
-        shape=(observation_preprocessing.SMM_HEIGHT,
-               observation_preprocessing.SMM_WIDTH,
-               len(observation_preprocessing.SMM_LAYERS)),
-        dtype=np.uint8)
+        low=env.observation_space.low[0],
+        high=env.observation_space.high[0],
+        dtype=env.observation_space.dtype)
 
   def observation(self, obs):
-    return observation_preprocessing.generate_smm(obs)
+    return obs[0]
+
+
+class SingleAgentRewardWrapper(gym.RewardWrapper):
+  """A wrapper that converts an observation to a minimap."""
+
+  def __init__(self, env):
+    gym.RewardWrapper.__init__(self, env)
+
+  def reward(self, reward):
+    return reward[0]
 
 
 class CheckpointRewardWrapper(gym.RewardWrapper):
@@ -182,55 +195,54 @@ class CheckpointRewardWrapper(gym.RewardWrapper):
 
   def __init__(self, env):
     gym.RewardWrapper.__init__(self, env)
-    self._collected_checkpoints = 0
+    self._collected_checkpoints = {True: 0, False: 0}
     self._num_checkpoints = 10
     self._checkpoint_reward = 0.1
 
   def reset(self):
-    self._collected_checkpoints = 0
+    self._collected_checkpoints = {True: 0, False: 0}
     return self.env.reset()
 
   def reward(self, reward):
     if self.env.unwrapped.last_observation is None:
       return reward
 
-    if reward == 1:
-      reward += self._checkpoint_reward * (
-          self._num_checkpoints - self._collected_checkpoints)
-      self._collected_checkpoints = self._num_checkpoints
-      return reward
+    assert len(reward) == len(self.env.unwrapped.last_observation)
 
-    o = self.env.unwrapped.last_observation
+    for rew_index in range(len(reward)):
+      o = self.env.unwrapped.last_observation[rew_index]
+      is_left_to_right = o['is_left']
 
-    if 'active' not in o:
-      return reward
+      if reward[rew_index] == 1:
+        reward[rew_index] += self._checkpoint_reward * (
+            self._num_checkpoints -
+            self._collected_checkpoints[is_left_to_right])
+        self._collected_checkpoints[is_left_to_right] = self._num_checkpoints
+        continue
 
-    active = o['home_team'][o['active']]
+      # Check if the active player has the ball.
+      if ('ball_owned_team' not in o or
+          o['ball_owned_team'] != (0 if is_left_to_right else 1) or
+          'ball_owned_player' not in o or
+          o['ball_owned_player'] != o['active']):
+        continue
 
-    # Distance between the ball (or our player since we possess the ball)
-    # and the goal of the opponent (coordinates = [1, 0]).
-    d1 = ((o['ball'][0] - active[0]) ** 2 +
-          (o['ball'][1] - active[1]) ** 2) ** 0.5
-    if d1 > 0.03:
-      return reward
-    d = ((o['ball'][0] - 1) ** 2 + o['ball'][1] ** 2) ** 0.5
-
-    # Collect the checkpoints.
-    # We give reward for distance 1 to 0.2.
-    while self._collected_checkpoints < self._num_checkpoints:
-      if self._num_checkpoints == 1:
-        threshold = 0.99 - 0.8
+      if is_left_to_right:
+        d = ((o['ball'][0] - 1) ** 2 + o['ball'][1] ** 2) ** 0.5
       else:
-        threshold = (0.99 - 0.8 / (self._num_checkpoints - 1) *
-                     self._collected_checkpoints)
-      if d > threshold:
-        break
-      reward += self._checkpoint_reward
-      self._collected_checkpoints += 1
+        d = ((o['ball'][0] + 1) ** 2 + o['ball'][1] ** 2) ** 0.5
 
+      # Collect the checkpoints.
+      # We give reward for distance 1 to 0.2.
+      while (self._collected_checkpoints[is_left_to_right] <
+             self._num_checkpoints):
+        if self._num_checkpoints == 1:
+          threshold = 0.99 - 0.8
+        else:
+          threshold = (0.99 - 0.8 / (self._num_checkpoints - 1) *
+                       self._collected_checkpoints[is_left_to_right])
+        if d > threshold:
+          break
+        reward[rew_index] += self._checkpoint_reward
+        self._collected_checkpoints[is_left_to_right] += 1
     return reward
-
-  def step(self, action):
-    observation, reward, done, info = self.env.step(action)
-    info['score_reward'] = float(reward)
-    return observation, self.reward(reward), done, info

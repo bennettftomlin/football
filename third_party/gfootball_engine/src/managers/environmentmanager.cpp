@@ -22,9 +22,6 @@
 
 namespace blunted {
 
-  template<> EnvironmentManager* Singleton<EnvironmentManager>::singleton = 0;
-
-
   EnvironmentManager::EnvironmentManager() {
   };
 
@@ -38,13 +35,4 @@ namespace blunted {
   unsigned long EnvironmentManager::GetTime_ms() {
     return currentTime_ms;
   }
-
-  void EnvironmentManager::SignalQuit() {
-    quit = true;
-  }
-
-  bool EnvironmentManager::GetQuit() {
-    return quit;
-  }
-
 }

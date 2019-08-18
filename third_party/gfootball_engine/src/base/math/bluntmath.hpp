@@ -31,31 +31,15 @@ namespace blunted {
   real NormalizedClamp(const real value, const real min, const real max);
 
   // you can never be too specific ;)
-  const real pi = 3.1415926535897932384626433832795028841972f; // last decimal rounded ;)
-  extern unsigned int fastrandseed;
-  extern unsigned int max_uint;
-
+  constexpr real pi = 3.1415926535897932384626433832795028841972f; // last decimal rounded ;)
   typedef real radian;
 
-	void normalize(real v[3]);
-  bool sign(real n);
-  signed int signSide(real n); // returns -1 or 1
+  void normalize(real v[3]);
+  signed int signSide(real n);  // returns -1 or 1
   bool is_odd(int n);
   void randomseed(unsigned int seed);
-  real random(real min, real max);
+  real boostrandom(real min, real max);
   real random_non_determ(real min, real max);
-
-  inline void fastrandomseed(unsigned int seed) {
-    fastrandseed = seed;
-    max_uint = std::numeric_limits<unsigned int>::max();
-  }
-
-  inline real fastrandom(real min, real max) {
-    real range = max - min;
-    real tmp = (fastrandseed / (max_uint * 1.0f)) * range + min;
-    fastrandseed = (214013 * fastrandseed + 2531011);
-    return tmp;
-  }
 
   inline float curve(float source, float bias = 1.0f) { // make linear / into sined _/-
     return (std::sin((source - 0.5f) * pi) * 0.5f + 0.5f) * bias +

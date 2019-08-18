@@ -19,9 +19,26 @@
 class PlayerBase(object):
   """Base player class."""
 
-  def can_play_right_to_left(self):
-    """Returns true whether player uses observations provided for doing step."""
-    return True
+  def __init__(self, player_config=None):
+    self._num_left_controlled_players = 1
+    self._num_right_controlled_players = 0
+    if player_config:
+      self._num_left_controlled_players = int(player_config['left_players'])
+      self._num_right_controlled_players = int(player_config['right_players'])
+
+  def num_controlled_left_players(self):
+    return self._num_left_controlled_players
+
+  def num_controlled_right_players(self):
+    return self._num_right_controlled_players
+
+  def num_controlled_players(self):
+    return (self._num_left_controlled_players +
+            self._num_right_controlled_players)
 
   def reset(self):
     pass
+
+  def swap_sides(self):
+    self._num_left_controlled_players, self._num_right_controlled_players = (
+        self._num_right_controlled_players, self._num_left_controlled_players)

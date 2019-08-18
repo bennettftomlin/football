@@ -19,7 +19,6 @@ from __future__ import print_function
 
 import copy
 import logging
-import os
 import sys
 import traceback
 
@@ -51,23 +50,64 @@ def log(func):
     return wrapper
 
 
+def parse_player_definition(definition):
+  """Parses player definition.
+
+  An example of player definition is: "agent:players=4" or "replay:path=...".
+
+  Args:
+    definition: a string defining a player
+
+  Returns:
+    A tuple (name, dict).
+  """
+  name = definition
+  d = {'left_players': 0,
+       'right_players': 0}
+  if ':' in definition:
+    (name, params) = definition.split(':')
+    for param in params.split(','):
+      (key, value) = param.split('=')
+      d[key] = value
+  if d['left_players'] == 0 and d['right_players'] == 0:
+    d['left_players'] = 1
+  return name, d
+
+
+def count_players(definition):
+  """Returns a number of players given a definition."""
+  _, player_definition = parse_player_definition(definition)
+  return (int(player_definition['left_players']) +
+          int(player_definition['right_players']))
+
+
+def count_left_players(definition):
+  """Returns a number of left players given a definition."""
+  return int(parse_player_definition(definition)[1]['left_players'])
+
+
+def count_right_players(definition):
+  """Returns a number of players given a definition."""
+  return int(parse_player_definition(definition)[1]['right_players'])
+
+
+def get_agent_number_of_players(players):
+  """Returns a total number of players controlled by an agent."""
+  return sum([count_players(player) for player in players
+              if player.startswith('agent')])
+
+
 class Config(object):
 
   def __init__(self, values=None):
     self._values = {
         'action_set': 'default',
-        'away_players': [],
-        'data_dir':
-            os.path.abspath(os.path.join(os.path.dirname(libgame.__file__),
-                                         'data')),
-        'font_file':
-            os.path.abspath(os.path.join(os.path.dirname(libgame.__file__),
-                                         'fonts', 'AlegreyaSansSC-ExtraBold.ttf')),
+        'enable_sides_swap': False,
         'display_game_stats': True,
         'dump_full_episodes': False,
         'dump_scores': False,
         'game_difficulty': 0.6,
-        'home_players': ['agent'],
+        'players': ['agent:left_players=1'],
         'level': '11_vs_11_stochastic',
         'physics_steps_per_frame': 10,
         'real_time': False,
@@ -75,13 +115,20 @@ class Config(object):
         'tracesdir': '/tmp/dumps',
         'write_video': False
     }
-    if 'GFOOTBALL_DATA_DIR' in os.environ:
-      self._values['data_dir'] = os.environ['GFOOTBALL_DATA_DIR']
-    if 'GFOOTBALL_FONT' in os.environ:
-      self._values['font_file'] = os.environ['GFOOTBALL_FONT']
     if values:
       self._values.update(values)
     self.NewScenario()
+
+  def number_of_left_players(self):
+    return sum([count_left_players(player)
+                for player in self._values['players']])
+
+  def number_of_right_players(self):
+    return sum([count_right_players(player)
+                for player in self._values['players']])
+
+  def number_of_players_agent_controls(self):
+    return get_agent_number_of_players(self._values['players'])
 
   def __eq__(self, other):
     assert isinstance(other, self.__class__)
@@ -118,9 +165,6 @@ class Config(object):
     cfg.render_mode = libgame.e_RenderingMode.e_Onscreen if self[
         'render'] else libgame.e_RenderingMode.e_Disabled
     cfg.high_quality = self['render']
-    cfg.data_dir = self['data_dir']
-    cfg.font_file = self['font_file']
-    cfg.game_difficulty = self['game_difficulty']
     cfg.physics_steps_per_frame = self['physics_steps_per_frame']
     return cfg
 

@@ -41,7 +41,7 @@ packages = find_packages() + find_packages('third_party')
 
 setup(
     name='gfootball',
-    version='0.2',
+    version='1.3',
     description=('Google Research Football - RL environment based on '
                  'open-source game Gameplay Football'),
     author='Google LLC',
@@ -56,15 +56,11 @@ setup(
         'opencv-python',
         'scipy',
         'gym',
-        'baselines>=0.1.6',
     ],
     extras_require={
         'tf_cpu': ['tensorflow<2.0'],
         'tf_gpu': ['tensorflow-gpu<2.0'],
     },
-    dependency_links=[
-      'git+https://github.com/openai/baselines.git@master#egg=baselines-0.1.6'
-    ],
     include_package_data=True,
     keywords='gfootball reinforcement-learning python machine learning',
     ext_modules=[CMakeExtension('brainball_cpp_engine')],

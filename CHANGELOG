@@ -1,0 +1,46 @@
+Numbering scheme:
+Each environment release number is of the form vX.Y. X is the major version
+number, Y is the minor version number. Experiment results within the same X
+should not change, as modifications made to the environment are either
+new features or backward compatible bug fixes. We will maintain vX branches
+pointing at the most recent vX.Y.
+
+v1.3
+- Fix to pixel representation (https://github.com/google-research/football/issues/54,56,57).
+
+v1.2
+- Reduction of memory usage by the environment (https://github.com/google-research/football/issues/47).
+- Reduction of memory usage during compilation (https://github.com/google-research/football/issues/49).
+- Elimination of --no-pie compilation flag (https://github.com/google-research/football/issues/53).
+- Fix for broken wrappers.py (https://github.com/google-research/football/issues/54).
+
+v1.1
+- Add support for running multiple environment instances in a single process.
+- Replaced left_players and right_players with a single players flag. This allows for controling players in both teams by a single agent (useful for self-play).
+- Make ball_owned_player and ball_owned_team consistent (fix for https://github.com/google-research/football/issues/45).
+- Removed paper.pdf and references to it. The paper is now at https://arxiv.org/abs/1907.11180.
+
+v1.0 (released July 19th, 2019)
+- added support for multi agent training with run_multiagent_rllib.py example.
+- added enable_sides_swap parameter to create_environment, which enables random swapping of team sides for each episode. This is useful for self-play training.
+- over 3x speedup to the game engine.
+- renamed home/away teams to left/right.
+- eliminated implicit observation and action rotation for the right team. `is_active_left` denotes controlling left team.
+- config is not passed anymore to the reset method.
+- minor game engine bug fixes and code cleanup.
+- eliminated chdir calls from the environment, so that working dir does not change.
+- backfilled missing values in simple115 representation for the case when training with less than 22 players.
+- updated game engine to use Boost.Signals2.
+- updated environment to the new OpenAI Gym API.
+
+v0.3 (released June 14th, 2019)
+- change action set to include sliding, dribbling and keeper rush.
+- cleanup in action set & sticky actions on python side.
+- change to env: now it release non-sticky actions after a single environment step.
+- game engine change: the goalkeeper now move backwards when the ball if bound.
+  for the goal and is flying high.
+- game engine change: call randomize with seed right before match creation.
+- update documentation with frequent problems & mailing list.
+- updated paper.pdf with citation to RoboCup and new action set.
+
+v0.2 - initial release (released June 7th, 2019)

@@ -40,12 +40,10 @@ ElizaController::ElizaController(Match *match, bool lazyPlayer) : PlayerControll
 }
 
 ElizaController::~ElizaController() {
-  if (Verbose()) printf("exiting elizacontroller.. ");
   if (defenseStrategy) delete defenseStrategy;
   if (midfieldStrategy) delete midfieldStrategy;
   if (offenseStrategy) delete offenseStrategy;
   if (goalieStrategy) delete goalieStrategy;
-  if (Verbose()) printf("done\n");
 }
 
 void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
@@ -117,15 +115,20 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       command.desiredDirection = player->GetDirectionVec();
     }
     command.desiredVelocityFloat = idleVelocity;
-    if (!match->IsInSetPiece()) {
+    //if (!match->IsInSetPiece()) {
       command.desiredDirection = (player->GetDirectionVec() * 0.6f + (Vector3(0) - player->GetPosition()).GetNormalized(player->GetDirectionVec()) * 0.4f).GetNormalized(player->GetDirectionVec());
-      command.desiredVelocityFloat = ClampVelocity(player->GetFloatVelocity() * 0.95f - random(0.0f, 3.2f));
-    }
-    command.useDesiredLookAt = true;
-    command.desiredLookAt = player->GetPosition() + (match->GetBall()->Predict(0).Get2D() - player->GetPosition()).GetNormalized(command.desiredDirection) * 10.0f;
-    commandQueue.push_back(command);
+      command.desiredVelocityFloat = ClampVelocity(
+          player->GetFloatVelocity() * 0.95f - boostrandom(0.0f, 3.2f));
+      //}
+      command.useDesiredLookAt = true;
+      command.desiredLookAt =
+          player->GetPosition() +
+          (match->GetBall()->Predict(0).Get2D() - player->GetPosition())
+                  .GetNormalized(command.desiredDirection) *
+              10.0f;
+      commandQueue.push_back(command);
 
-    return;
+      return;
   }
 
 
@@ -140,8 +143,11 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       actionCommand.desiredFunctionType = e_FunctionType_Shot;
       actionCommand.useDesiredMovement = false;
       actionCommand.useDesiredLookAt = false;
-      actionCommand.touchInfo.desiredDirection = (Vector3(-team->GetSide() * pitchHalfW, random(-5, 5), 0) - CastPlayer()->GetPosition()).GetNormalized(Vector3(-team->GetSide(), 0, 0));
-      actionCommand.touchInfo.desiredPower = random(0.4f, 1.0f);
+      actionCommand.touchInfo.desiredDirection =
+          (Vector3(-team->GetSide() * pitchHalfW, boostrandom(-5, 5), 0) -
+           CastPlayer()->GetPosition())
+              .GetNormalized(Vector3(-team->GetSide(), 0, 0));
+      actionCommand.touchInfo.desiredPower = boostrandom(0.4f, 1.0f);
       commandQueue.push_back(actionCommand);
 
     } else {
@@ -160,12 +166,16 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       bool doCommand = true;
 
       if (team->GetController()->GetSetPieceType() == e_GameMode_GoalKick) {
-        if (random(0.0f, 1.0f) > 0.4f && team->GetHumanGamerCount() == 0) {
+        if (boostrandom(0.0f, 1.0f) > 0.4f && team->GetHumanGamerCount() == 0) {
           actionCommand.desiredFunctionType = e_FunctionType_HighPass;
-          desiredTargetPosition = Vector3((pitchHalfW * -team->GetSide()) * 0.2f, random(-pitchHalfH, pitchHalfH), 0.0f);
+          desiredTargetPosition =
+              Vector3((pitchHalfW * -team->GetSide()) * 0.2f,
+                      boostrandom(-pitchHalfH, pitchHalfH), 0.0f);
         } else {
           actionCommand.desiredFunctionType = e_FunctionType_ShortPass;
-          desiredTargetPosition = Vector3(player->GetPosition().coords[0] * 0.9f, random(-pitchHalfH, pitchHalfH), 0.0f);
+          desiredTargetPosition =
+              Vector3(player->GetPosition().coords[0] * 0.9f,
+                      boostrandom(-pitchHalfH, pitchHalfH), 0.0f);
         }
 
       } else if (team->GetController()->GetSetPieceType() == e_GameMode_KickOff) {
@@ -173,18 +183,24 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
         desiredTargetPosition = player->GetPosition() + player->GetDirectionVec() * 1.0f;
 
       } else if (team->GetController()->GetSetPieceType() == e_GameMode_FreeKick) {
-        if (random(0.0f, 1.0f) > 0.5f) {
+        if (boostrandom(0.0f, 1.0f) > 0.5f) {
           actionCommand.desiredFunctionType = e_FunctionType_HighPass;
-          desiredTargetPosition = Vector3(pitchHalfW * -team->GetSide(), random(-10.0f, 10.0f), 0.0f);
+          desiredTargetPosition = Vector3(pitchHalfW * -team->GetSide(),
+                                          boostrandom(-10.0f, 10.0f), 0.0f);
         } else {
           actionCommand.desiredFunctionType = e_FunctionType_ShortPass;
-          desiredTargetPosition = player->GetPosition() + Vector3(-team->GetSide() * 10.0f, random(-10.0f, 10.0f), 0.0f);
+          desiredTargetPosition =
+              player->GetPosition() + Vector3(-team->GetSide() * 10.0f,
+                                              boostrandom(-10.0f, 10.0f), 0.0f);
         }
 
       } else if (team->GetController()->GetSetPieceType() == e_GameMode_Corner) {
-        if (random(0.0f, 1.0f) > 0.3f) {
+        if (boostrandom(0.0f, 1.0f) > 0.3f) {
           actionCommand.desiredFunctionType = e_FunctionType_HighPass;
-          desiredTargetPosition = Vector3((pitchHalfW * -team->GetSide()) * (0.99f - random(0.0f, 0.12f)), random(-10.0f, 10.0f), 0.0f);
+          desiredTargetPosition =
+              Vector3((pitchHalfW * -team->GetSide()) *
+                          (0.99f - boostrandom(0.0f, 0.12f)),
+                      boostrandom(-10.0f, 10.0f), 0.0f);
         } else {
           actionCommand.desiredFunctionType = e_FunctionType_ShortPass;
           desiredTargetPosition = Vector3((pitchHalfW * -team->GetSide()) * 0.8f, player->GetPosition().coords[1] * 0.8f, 0.0f);
@@ -196,7 +212,9 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
       } else if (match->GetBallRetainer() == player) { // keeper fetched ball, probably
         actionCommand.desiredFunctionType = e_FunctionType_HighPass;
-        desiredTargetPosition = Vector3(pitchHalfW * team->GetSide(), random(-pitchHalfH, pitchHalfH), 0.0f);
+        desiredTargetPosition =
+            Vector3(pitchHalfW * team->GetSide(),
+                    boostrandom(-pitchHalfH, pitchHalfH), 0.0f);
         Player *targetPlayer = AI_GetClosestPlayer(team, desiredTargetPosition, false, CastPlayer());
 
         if (targetPlayer) {
@@ -369,7 +387,7 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
           AI_GetClosestPlayers(team, opp->GetPosition() + opp->GetMovement() * 0.1f, false, closestPlayers, huntingPlayersNum);
           bool close = false;
           for (unsigned int i = 0; i < closestPlayers.size(); i++) {
-            if (closestPlayers.at(i) == player) {
+            if (closestPlayers[i] == player) {
               close = true;
               break;
             }
@@ -468,7 +486,7 @@ float ElizaController::GetLazyVelocity(float desiredVelocityFloat) {
   // short term fatigue/work rate shortage ;)
   // does not heed dribble clamp above, as to simulate players having to stop to catch their breath
   float breathLeftFactor = 1.0f - NormalizedClamp(CastPlayer()->GetAverageVelocity(10), idleVelocity, sprintVelocity);
-  float workRate = CastPlayer()->GetStat("mental_workrate");
+  float workRate = CastPlayer()->GetStat(mental_workrate);
   breathLeftFactor = std::pow(breathLeftFactor, 0.8f - workRate * 0.2f);
   breathLeftFactor = clamp(breathLeftFactor * 1.2f, 0.0f, 1.0f); // make sure beginning of sprint is full speed
   breathLeftFactor = breathLeftFactor * lazyFactor + 1.0f * (1.0f - lazyFactor); // sometimes, we really need to force it
@@ -580,7 +598,7 @@ Vector3 ElizaController::GetSupportPosition_ForceField(const MentalImage *mental
   std::vector<Player*> opponents;
   AI_GetClosestPlayers(match->GetTeam(abs(team->GetID() - 1)), mainManPos * 0.3f + currentPos + 0.7f, false, opponents, 3);
   for (unsigned int i = 0; i < opponents.size(); i++) {
-    const PlayerImage &oppImg = mentalImage->GetPlayerImage(opponents.at(i)->GetID());
+    const PlayerImage &oppImg = mentalImage->GetPlayerImage(opponents[i]->GetID());
     ForceSpot spot;
     Vector3 oppPos = oppImg.position + oppImg.movement * 0.1f;
     spot.origin = oppPos + (oppPos - mainManPos).GetNormalized(0) * 2.0f; // anti-magnet behind opponent, because the pass-way must be cleared
@@ -601,8 +619,8 @@ Vector3 ElizaController::GetSupportPosition_ForceField(const MentalImage *mental
     std::vector<Player*> players;
     AI_GetClosestPlayers(team, currentPos, false, players, 6);
     for (unsigned int i = 0; i < players.size(); i++) {
-      if (players.at(i) != CastPlayer()) {
-        const PlayerImage &mateImg = mentalImage->GetPlayerImage(players.at(i)->GetID());
+      if (players[i] != CastPlayer()) {
+        const PlayerImage &mateImg = mentalImage->GetPlayerImage(players[i]->GetID());
         ForceSpot spot;
         spot.origin = mateImg.position + mateImg.movement * 0.1f;
         spot.magnetType = e_MagnetType_Repel;
@@ -680,10 +698,9 @@ void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQu
 
   float oneTouchIsHard = 0.0f;
   float movementDiff = NormalizedClamp((match->GetBall()->GetMovement() - CastPlayer()->GetMovement()).GetLength(), 0.0f, 10.0f);
-  oneTouchIsHard = movementDiff - CastPlayer()->GetStat("technical_shortpass") * movementDiff * 0.8f;
+  oneTouchIsHard = movementDiff - CastPlayer()->GetStat(technical_shortpass) * movementDiff * 0.8f;
 
-  std::vector<PlayerImage> opponentPlayerImages;
-  _mentalImage->GetTeamPlayerImages(abs(team->GetID() - 1), -1, opponentPlayerImages);
+  auto opponentPlayerImages = _mentalImage->GetTeamPlayerImages(abs(team->GetID() - 1));
 
 
   // DECIDE WHAT TO DO
@@ -741,19 +758,19 @@ void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQu
   bestMateRating.passType = e_FunctionType_ShortPass;
   for (unsigned int i = 0; i < mates.size(); i++) {
 
-    if (mates.at(i) != CastPlayer()) {
+    if (mates[i] != CastPlayer()) {
 
-      const TacticalPlayerSituation &mateSit = mates.at(i)->GetTacticalSituation();
+      const TacticalPlayerSituation &mateSit = mates[i]->GetTacticalSituation();
 
       float mateTacticalRating = mateSit.forwardSpaceRating * forwardSpaceWeight +
                                  mateSit.spaceRating * spaceWeight +
                                  mateSit.forwardRating * forwardWeight;
 
       mateTacticalRating /= totalWeight1;
-      if (mates.at(i)->GetFormationEntry().role == e_PlayerRole_GK) mateTacticalRating *= 0.7f; // don't like playing back to goalie
+      if (mates[i]->GetFormationEntry().role == e_PlayerRole_GK) mateTacticalRating *= 0.7f; // don't like playing back to goalie
 
       MateRating mateRating;
-      mateRating.player = mates.at(i);
+      mateRating.player = mates[i];
       mateRating.tacticalRating = mateTacticalRating;
 
       if (mateTacticalRating > tacticalRating + tacticalImprovementThreshold) {
@@ -761,9 +778,9 @@ void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQu
         float tacticalDiffRating = mateRating.tacticalRating - tacticalRating;
 
         mateRating.tacticalDiffRating = tacticalDiffRating;
-        float passingOddsShort = _GetPassingOdds(mates.at(i), e_FunctionType_ShortPass, opponentPlayerImages);
-        float passingOddsLong  = _GetPassingOdds(mates.at(i), e_FunctionType_LongPass,  opponentPlayerImages);
-        float passingOddsHigh  = _GetPassingOdds(mates.at(i), e_FunctionType_HighPass,  opponentPlayerImages);
+        float passingOddsShort = _GetPassingOdds(mates[i], e_FunctionType_ShortPass, opponentPlayerImages);
+        float passingOddsLong  = _GetPassingOdds(mates[i], e_FunctionType_LongPass,  opponentPlayerImages);
+        float passingOddsHigh  = _GetPassingOdds(mates[i], e_FunctionType_HighPass,  opponentPlayerImages);
         if (passingOddsShort >= passingOddsLong && passingOddsShort >= passingOddsHigh) {
           mateRating.passRating = passingOddsShort;
           mateRating.passType = e_FunctionType_ShortPass;
@@ -799,7 +816,6 @@ void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQu
     if (CastPlayer()->GetDynamicFormationEntry().role != e_PlayerRole_GK) {
       if ((bestMateRating.player == 0 || bestMateRating.passRating < panicProneness * goalCloseness) && possessionAmount < 0.9f + panicProneness * goalCloseness * 0.8f) {
         _AddPanicPass(commandQueue);
-        if (Verbose()) printf("panic! %f, %f, %f\n", possessionAmount, panicProneness, goalCloseness);
       }
     } else { // keeper
       if (possessionAmount < 3.0f) {
@@ -825,18 +841,24 @@ void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQu
     if (odds3 > odds) { odds = odds3; y =  3.5f; }
 
     odds = std::pow(odds, 0.5f);
-    if (Verbose()) printf("ODDS: %f\n", odds);
 
-    if (odds + random(0.0f, 0.5f) > 0.5f) {
+    if (odds + boostrandom(0.0f, 0.5f) > 0.5f) {
       PlayerCommand command;
       command.desiredFunctionType = e_FunctionType_Shot;
       command.useDesiredMovement = false;
       command.useDesiredLookAt = false;
       command.desiredVelocityFloat = rawInputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
-      command.touchInfo.desiredDirection = (Vector3((pitchHalfW + 1.0f) * -team->GetSide(), y + random(-1.0f + player->GetStat("technical_shot"), 1.0f - player->GetStat("technical_shot")), 0) - (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f)).GetNormalized(Vector3(-team->GetSide(), 0, 0));
+      command.touchInfo.desiredDirection =
+          (Vector3((pitchHalfW + 1.0f) * -team->GetSide(),
+                   y + boostrandom(-1.0f + player->GetStat(technical_shot),
+                                   1.0f - player->GetStat(technical_shot)),
+                   0) -
+           (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f))
+              .GetNormalized(Vector3(-team->GetSide(), 0, 0));
       command.touchInfo.desiredDirection = (command.touchInfo.desiredDirection * 0.7f + -CastPlayer()->GetDirectionVec() * (CastPlayer()->GetFloatVelocity() / sprintVelocity) * 0.3f).GetNormalized();
       command.touchInfo.autoDirectionBias = 1.0f;
-      command.touchInfo.desiredPower = random(0.7f * (0.6f + goalDist * 0.4f), 1.0f * (0.6f + goalDist * 0.4f));
+      command.touchInfo.desiredPower = boostrandom(
+          0.7f * (0.6f + goalDist * 0.4f), 1.0f * (0.6f + goalDist * 0.4f));
       commandQueue.push_back(command);
     }
   }
@@ -892,7 +914,7 @@ void ElizaController::_AddPanicPass(std::vector<PlayerCommand> &commandQueue) {
   commandQueue.push_back(command);
 }
 
-float ElizaController::_GetPassingOdds(Player *targetPlayer, e_FunctionType passType, const std::vector<PlayerImage> &opponentPlayerImages, float ballVelocityMultiplier) {
+float ElizaController::_GetPassingOdds(Player *targetPlayer, e_FunctionType passType, const std::vector<PlayerImagePosition> &opponentPlayerImages, float ballVelocityMultiplier) {
 
   float initialTargetDistance = (targetPlayer->GetPosition() - player->GetPosition()).GetLength();
   if (passType == e_FunctionType_HighPass && initialTargetDistance < 10.0f) return 0.0f;
@@ -904,7 +926,7 @@ float ElizaController::_GetPassingOdds(Player *targetPlayer, e_FunctionType pass
   return _GetPassingOdds(target, passType, opponentPlayerImages, ballVelocityMultiplier);
 }
 
-float ElizaController::_GetPassingOdds(const Vector3 &target, e_FunctionType passType, const std::vector<PlayerImage> &opponentPlayerImages, float ballVelocityMultiplier) {
+float ElizaController::_GetPassingOdds(const Vector3 &target, e_FunctionType passType, const std::vector<PlayerImagePosition> &opponentPlayerImages, float ballVelocityMultiplier) {
 
   float secondScale = 1.0f; // how many seconds of range to measure danger in
 

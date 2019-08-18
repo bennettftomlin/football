@@ -19,10 +19,10 @@
 
 #include <cmath>
 
-#include "../base/utils.hpp"
-#include "../scene/objectfactory.hpp"
-#include "../managers/resourcemanagerpool.hpp"
 #include "../base/geometry/trianglemeshutils.hpp"
+#include "../base/utils.hpp"
+#include "../main.hpp"
+#include "../scene/objectfactory.hpp"
 
 namespace blunted {
 
@@ -54,9 +54,9 @@ namespace blunted {
     // check if geom exists
 
     for (int i = 0; i < (signed int)geomVec.size(); i++) {
-      if (geomVec.at(i).x == x && geomVec.at(i).y == y) {
-        //printf("%f %f %f %f\n", geomVec.at(i).x, x, geomVec.at(i).y, y);
-        return geomVec.at(i).geomData; // found! return geomdata
+      if (geomVec[i].x == x && geomVec[i].y == y) {
+        //printf("%f %f %f %f\n", geomVec[i].x, x, geomVec[i].y, y);
+        return geomVec[i].geomData; // found! return geomdata
       }
     }
 
@@ -66,7 +66,9 @@ namespace blunted {
     GeomIndex newIndex;
     newIndex.x = x;
     newIndex.y = y;
-    newIndex.geomData = ResourceManagerPool::getGeometryManager()->Fetch(name + " gridGeomData @ " + int_to_str(x) + ", " + int_to_str(y), false, false);
+    newIndex.geomData = GetContext().geometry_manager.Fetch(
+        name + " gridGeomData @ " + int_to_str(x) + ", " + int_to_str(y), false,
+        false);
     geomVec.push_back(newIndex);
 
     return newIndex.geomData;
@@ -87,20 +89,24 @@ namespace blunted {
     for (int i = 0; i < (signed int)tmeshes.size(); i++) {
 
       std::vector<unsigned int> indices; // empty == don't use indices
-      AABB aabb = GetTriangleMeshAABB(tmeshes.at(i).vertices, tmeshes.at(i).verticesDataSize, indices);
+      AABB aabb = GetTriangleMeshAABB(tmeshes[i].vertices, tmeshes[i].verticesDataSize, indices);
       boost::intrusive_ptr < Resource<GeometryData> > subGeomData = GetGridGeom(source->GetName(), scene3D, geomVec, aabb, gridSize);
 
-      float *newTMesh = new float[tmeshes.at(i).verticesDataSize];
-      memcpy(newTMesh, tmeshes.at(i).vertices, tmeshes.at(i).verticesDataSize * sizeof(float));
-      subGeomData->GetResource()->AddTriangleMesh(tmeshes.at(i).material, newTMesh, tmeshes.at(i).verticesDataSize, indices);
+      float *newTMesh = new float[tmeshes[i].verticesDataSize];
+      memcpy(newTMesh, tmeshes[i].vertices, tmeshes[i].verticesDataSize * sizeof(float));
+      subGeomData->GetResource()->AddTriangleMesh(tmeshes[i].material, newTMesh, tmeshes[i].verticesDataSize, indices);
     }
 
     for (int i = 0; i < (signed int)geomVec.size(); i++) {
-      float x = geomVec.at(i).x;
-      float y = geomVec.at(i).y;
-      boost::intrusive_ptr<Geometry> geom = static_pointer_cast<Geometry>(ObjectFactory::GetInstance().CreateObject(source->GetName() + " gridGeom @ " + int_to_str(x) + ", " + int_to_str(y), e_ObjectType_Geometry));
+      float x = geomVec[i].x;
+      float y = geomVec[i].y;
+      boost::intrusive_ptr<Geometry> geom = static_pointer_cast<Geometry>(
+          GetContext().object_factory.CreateObject(
+              source->GetName() + " gridGeom @ " + int_to_str(x) + ", " +
+                  int_to_str(y),
+              e_ObjectType_Geometry));
       scene3D->CreateSystemObjects(geom);
-      geom->SetGeometryData(geomVec.at(i).geomData);
+      geom->SetGeometryData(geomVec[i].geomData);
       resultNode->AddObject(geom);
     }
 

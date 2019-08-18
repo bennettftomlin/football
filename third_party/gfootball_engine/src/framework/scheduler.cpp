@@ -17,9 +17,9 @@
 
 #include "scheduler.hpp"
 
-#include "../managers/resourcemanagerpool.hpp"
-#include "../managers/environmentmanager.hpp"
 #include "../base/log.hpp"
+#include "../main.hpp"
+#include "../managers/environmentmanager.hpp"
 
 namespace blunted {
 
@@ -28,18 +28,6 @@ namespace blunted {
   }
 
   Scheduler::~Scheduler() {
-  }
-
-  void Scheduler::Exit() {
-
-    if (GetSequenceCount() != 0) { // shouldn't happen
-      //sequences.Lock();
-      for (unsigned int i = 0; i < sequences.size(); i++) {
-        printf("sequence '%s' is stuck on entry #%i!\n", sequences.at(i)->taskSequence->GetName().c_str(), sequences.at(i)->programCounter);
-      }
-      //sequences.Unlock();
-    }
-    assert(GetSequenceCount() == 0);
   }
 
   int Scheduler::GetSequenceCount() {
@@ -51,7 +39,7 @@ namespace blunted {
     if (sequence->GetEntryCount() == 0) Log(e_FatalError, "Scheduler", "RegisterTaskSequence", "Trying to add a sequence without entries");
     sequence->AddTerminator();
     boost::shared_ptr<TaskSequenceProgram> program(new TaskSequenceProgram());
-    unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms();
+    unsigned long time_ms = GetContext().environment_manager.GetTime_ms();
     program->taskSequence = sequence;
     program->programCounter = 0;
     program->previousProgramCounter = -1;
@@ -65,9 +53,10 @@ namespace blunted {
 
   void Scheduler::ResetTaskSequenceTime(const std::string &name) {
     for (unsigned int i = 0; i < sequences.size(); i++) {
-      boost::shared_ptr<TaskSequenceProgram> program = sequences.at(i);
+      boost::shared_ptr<TaskSequenceProgram> program = sequences[i];
       if (program->taskSequence->GetName() == name) {
-        program->startTime = EnvironmentManager::GetInstance().GetTime_ms();// - startTime_ms;
+        program->startTime =
+            GetContext().environment_manager.GetTime_ms();  // - startTime_ms;
         program->timesRan = 0;
         break;
       }
@@ -77,7 +66,7 @@ namespace blunted {
   TaskSequenceInfo Scheduler::GetTaskSequenceInfo(const std::string &name) {
     TaskSequenceInfo info;
     for (unsigned int i = 0; i < sequences.size(); i++) {
-      boost::shared_ptr<TaskSequenceProgram> program = sequences.at(i);
+      boost::shared_ptr<TaskSequenceProgram> program = sequences[i];
       if (program->taskSequence->GetName() == name) {
 
         info.sequenceStartTime_ms = program->sequenceStartTime;
@@ -94,68 +83,68 @@ namespace blunted {
 
   bool Scheduler::Run() {
 
-    bool verbose = false;
-
-    // sequenced version, the best yet!
-    // thought up by Jurian Broertjes & Bastiaan Konings Schuiling
-
-    //boost::mutex::scoped_lock lock(somethingIsDoneMutex);
-
     unsigned int firstSequence = 0;
-    int quiterations = 0;
-    bool sequencesQuitMessageDone = false;
-
     //while (true) {
 
-      unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms();
-      unsigned long timeDiff_ms = time_ms - previousTime_ms;
-      previousTime_ms = time_ms;
+    unsigned long time_ms = GetContext().environment_manager.GetTime_ms();
+    unsigned long timeDiff_ms = time_ms - previousTime_ms;
+    previousTime_ms = time_ms;
 
-      // find first sequence entry that needs to be started
+    // find first sequence entry that needs to be started
 
-      TaskSequenceQueueEntry dueEntry;
+    TaskSequenceQueueEntry dueEntry;
 
-      bool someSequenceNeedsDeleting = false;
+    bool someSequenceNeedsDeleting = false;
 
-      for (unsigned int i = 0; i < sequences.size(); i++) {
-        int programIndex = (i + firstSequence) % sequences.size();
-        boost::shared_ptr<TaskSequenceProgram> program = sequences.at(programIndex);
+    for (unsigned int i = 0; i < sequences.size(); i++) {
+      int programIndex = (i + firstSequence) % sequences.size();
+      boost::shared_ptr<TaskSequenceProgram> program =
+          sequences.at(programIndex);
 
-        // check if previous entry is ready
-        bool previousEntryIsReady = true;
-        if (program->previousProgramCounter != -1) {
+      // check if previous entry is ready
+      bool previousEntryIsReady = true;
+      if (program->previousProgramCounter != -1) {
+        previousEntryIsReady =
+            program->taskSequence->GetEntry(program->previousProgramCounter)
+                ->IsReady();
 
-          previousEntryIsReady = program->taskSequence->GetEntry(program->previousProgramCounter)->IsReady();
+        if (previousEntryIsReady &&
+            program->programCounter == program->taskSequence->GetEntryCount()) {
+          program->programCounter = 0;
+          program->timesRan++;
+          program->lastSequenceTime = time_ms - program->sequenceStartTime;
+        }
+      }
 
-          if (previousEntryIsReady && program->programCounter == program->taskSequence->GetEntryCount()) {
-            program->programCounter = 0;
-            program->timesRan++;
-            program->lastSequenceTime = time_ms - program->sequenceStartTime;
+      if (previousEntryIsReady) {
+        long timeUntilDueEntry_ms = 0;  // if programCounter != 0, we just want
+                                        // to start the next entry ASAP
+
+        if (program->programCounter ==
+            0) {  // else, (re)starting sequence; find out when it's due
+
+          if (program->taskSequence->GetSkippable()) {
+            // use relative time: don't mind if last frame lasted too long
+            timeUntilDueEntry_ms = (program->sequenceStartTime +
+                                    program->taskSequence->GetSequenceTime()) -
+                                   time_ms;
+          } else {
+            // use absolute time: if not enough iterations have been done to get
+            // to frametime * timesran, start immediately
+            timeUntilDueEntry_ms =
+                (program->startTime +
+                 program->taskSequence->GetSequenceTime() * program->timesRan) -
+                time_ms;
           }
-
         }
 
-        if (previousEntryIsReady) {
-
-          long timeUntilDueEntry_ms = 0; // if programCounter != 0, we just want to start the next entry ASAP
-
-          if (program->programCounter == 0) { // else, (re)starting sequence; find out when it's due
-
-            if (program->taskSequence->GetSkippable()) {
-              // use relative time: don't mind if last frame lasted too long
-              timeUntilDueEntry_ms = (program->sequenceStartTime + program->taskSequence->GetSequenceTime()) - time_ms;
-            } else {
-              // use absolute time: if not enough iterations have been done to get to frametime * timesran, start immediately
-              timeUntilDueEntry_ms = (program->startTime + program->taskSequence->GetSequenceTime() * program->timesRan) - time_ms;
-            }
-          }
-
-          if (!program->readyToQuit && (timeUntilDueEntry_ms < dueEntry.timeUntilDueEntry_ms || dueEntry.program == boost::shared_ptr<TaskSequenceProgram>())) {
-            dueEntry.program = program;
-            dueEntry.timeUntilDueEntry_ms = timeUntilDueEntry_ms;
-          }
-
+        if (!program->readyToQuit &&
+            (timeUntilDueEntry_ms < dueEntry.timeUntilDueEntry_ms ||
+             dueEntry.program == boost::shared_ptr<TaskSequenceProgram>())) {
+          dueEntry.program = program;
+          dueEntry.timeUntilDueEntry_ms = timeUntilDueEntry_ms;
         }
+      }
 
       } // checked all sequences and (hopefully) found an entry that is due next
 
@@ -190,8 +179,6 @@ namespace blunted {
 
         if (dueEntry.program != boost::shared_ptr<TaskSequenceProgram>()) {
 
-          if (verbose) printf("time until due entry: %li\n", dueEntry.timeUntilDueEntry_ms);
-
           if (dueEntry.timeUntilDueEntry_ms <= 0) { // the first and/or other entries are due
 
             // run!
@@ -199,14 +186,13 @@ namespace blunted {
               dueEntry.program->sequenceStartTime = time_ms;
             }
 
-            if (verbose) printf("executing program counter %i\n", dueEntry.program->programCounter);
             dueEntry.program->taskSequence->GetEntry(dueEntry.program->programCounter)->Execute();
 
             dueEntry.program->previousProgramCounter = dueEntry.program->programCounter;
             dueEntry.program->programCounter++;
 
           } else {
-            EnvironmentManager::GetInstance().IncrementTime_ms(10);
+            GetContext().environment_manager.IncrementTime_ms(10);
           }
         }
 
